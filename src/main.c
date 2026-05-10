@@ -1,6 +1,11 @@
 #include "battery.h"
 #include "ble_hid.h"
+#include "app_watchdog.h"
+#include "factory_reset.h"
+#include "input_scanner.h"
+#include "power.h"
 
+#include <errno.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/settings/settings.h>
@@ -50,6 +55,7 @@ static void connected(struct bt_conn *conn, uint8_t err)
     }
 
     ble_hid_connected(conn);
+    power_on_connected();
     LOG_INF("Connected");
 }
 
@@ -59,6 +65,7 @@ static void disconnected(struct bt_conn *conn, uint8_t reason)
 
     LOG_INF("Disconnected: 0x%02x", reason);
     ble_hid_disconnected();
+    power_on_disconnected();
     advertising_start();
 }
 
@@ -107,6 +114,17 @@ static struct bt_conn_auth_info_cb auth_info_cb = {
     .pairing_failed = pairing_failed,
 };
 
+static void input_event_handler(uint8_t hid_keycode, bool pressed)
+{
+    int err = ble_hid_send_key_state(hid_keycode, pressed);
+
+    if (err == -ENOTCONN) {
+        LOG_DBG("Ignoring input while disconnected");
+    } else if (err) {
+        LOG_WRN("HID input send failed: %d", err);
+    }
+}
+
 int main(void)
 {
     int err;
@@ -123,6 +141,11 @@ int main(void)
         settings_load();
     }
 
+    err = factory_reset_check_boot_request();
+    if (err) {
+        LOG_WRN("Factory-reset check failed: %d", err);
+    }
+
     bt_conn_auth_cb_register(&auth_cb);
     bt_conn_auth_info_cb_register(&auth_info_cb);
 
@@ -133,15 +156,26 @@ int main(void)
     }
 
     battery_service_init();
+    power_init();
+
+    err = input_scanner_init(input_event_handler);
+    if (err) {
+        LOG_ERR("Input scanner init failed: %d", err);
+        return 0;
+    }
+
+    err = app_watchdog_init();
+    if (err) {
+        LOG_ERR("Watchdog init failed: %d", err);
+        return 0;
+    }
+
     advertising_start();
 
     while (true) {
-        /*
-         * Replace this with real debounced GPIO or matrix-scan input events.
-         * This heartbeat sends the A key every 5 seconds while connected.
-         */
-        k_sleep(K_SECONDS(5));
+        k_sleep(K_SECONDS(1));
+        app_watchdog_feed();
+        power_maintenance_run();
         battery_level_update();
-        ble_hid_send_key_click(BLE_HID_KEY_A_USAGE);
     }
 }

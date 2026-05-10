@@ -149,3 +149,8 @@ int ble_hid_send_key_click(uint8_t keycode)
 
     return send_keyboard_report(0x00, 0x00);
 }
+
+int ble_hid_send_key_state(uint8_t keycode, bool pressed)
+{
+    return send_keyboard_report(0x00, pressed ? keycode : 0x00);
+}
