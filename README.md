@@ -1,8 +1,6 @@
 # BLE HID Keyboard Example
 
 This is a Zephyr / nRF Connect SDK example for a BLE HID keyboard-style device.
-It is structured as a starting point for production firmware rather than a single
-demo file.
 
 ## Features
 
