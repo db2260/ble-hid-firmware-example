@@ -7,4 +7,8 @@ target_sources(app PRIVATE
   src/main.c
   src/ble_hid.c
   src/battery.c
+  src/input_scanner.c
+  src/factory_reset.c
+  src/power.c
+  src/app_watchdog.c
 )
